@@ -276,16 +276,6 @@ impl Core<Block> for RuntimeApi {
 		unimplemented!("Not required for testing!")
 	}
 
-	fn authorities_runtime_api_impl(
-		&self,
-		_: &BlockId<Block>,
-		_: ExecutionContext,
-		_: Option<()>,
-		_: Vec<u8>,
-	) -> Result<NativeOrEncoded<Vec<Ed25519AuthorityId>>> {
-		unimplemented!("Not required for testing!")
-	}
-
 	fn execute_block_runtime_api_impl(
 		&self,
 		_: &BlockId<Block>,

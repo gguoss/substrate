@@ -22,7 +22,7 @@ use parking_lot::RwLock;
 use primitives::{ChangesTrieConfiguration, storage::well_known_keys};
 use runtime_primitives::generic::BlockId;
 use runtime_primitives::traits::{Block as BlockT, Header as HeaderT, Zero,
-	NumberFor, As, Digest, DigestItem, AuthorityIdFor};
+	NumberFor, As, Digest, DigestItem};
 use runtime_primitives::{Justification, StorageOverlay, ChildrenStorageOverlay};
 use state_machine::backend::{Backend as StateBackend, InMemory, Consolidate};
 use state_machine::{self, InMemoryChangesTrieStorage, ChangesTrieAnchorBlockId};
@@ -109,7 +109,7 @@ pub struct Blockchain<Block: BlockT> {
 
 struct Cache<Block: BlockT> {
 	storage: Arc<RwLock<BlockchainStorage<Block>>>,
-	authorities_at: RwLock<HashMap<Block::Hash, Option<Vec<AuthorityIdFor<Block>>>>>,
+	cache: RwLock<HashMap<Block::Hash, HashMap<Vec<u8>, Vec<u8>>>>,
 }
 
 impl<Block: BlockT + Clone> Clone for Blockchain<Block> {
@@ -119,7 +119,7 @@ impl<Block: BlockT + Clone> Clone for Blockchain<Block> {
 			storage: storage.clone(),
 			cache: Cache {
 				storage,
-				authorities_at: RwLock::new(self.cache.authorities_at.read().clone()),
+				cache: RwLock::new(self.cache.cache.read().clone()),
 			},
 		}
 	}
@@ -154,7 +154,7 @@ impl<Block: BlockT> Blockchain<Block> {
 			storage: storage.clone(),
 			cache: Cache {
 				storage: storage,
-				authorities_at: Default::default(),
+				cache: Default::default(),
 			},
 		}
 	}
@@ -398,7 +398,7 @@ impl<Block: BlockT> light::blockchain::Storage<Block> for Blockchain<Block>
 	fn import_header(
 		&self,
 		header: Block::Header,
-		authorities: Option<Vec<AuthorityIdFor<Block>>>,
+		cache: HashMap<Vec<u8>, Vec<u8>>,
 		state: NewBlockState,
 		aux_ops: Vec<(Vec<u8>, Option<Vec<u8>>)>,
 	) -> error::Result<()> {
@@ -406,7 +406,7 @@ impl<Block: BlockT> light::blockchain::Storage<Block> for Blockchain<Block>
 		let parent_hash = *header.parent_hash();
 		self.insert(hash, header, None, None, state)?;
 		if state.is_best() {
-			self.cache.insert(parent_hash, authorities);
+			self.cache.insert(parent_hash, cache);
 		}
 
 		self.write_aux(aux_ops);
@@ -443,7 +443,7 @@ impl<Block: BlockT> light::blockchain::Storage<Block> for Blockchain<Block>
 /// In-memory operation.
 pub struct BlockImportOperation<Block: BlockT, H: Hasher> {
 	pending_block: Option<PendingBlock<Block>>,
-	pending_authorities: Option<Vec<AuthorityIdFor<Block>>>,
+	pending_cache: HashMap<Vec<u8>, Vec<u8>>,
 	old_state: InMemory<H>,
 	new_state: Option<InMemory<H>>,
 	changes_trie_update: Option<MemoryDB<H>>,
@@ -480,8 +480,8 @@ where
 		Ok(())
 	}
 
-	fn update_authorities(&mut self, authorities: Vec<AuthorityIdFor<Block>>) {
-		self.pending_authorities = Some(authorities);
+	fn update_cache(&mut self, cache: HashMap<Vec<u8>, Vec<u8>>) {
+		self.pending_cache = cache;
 	}
 
 	fn update_db_storage(&mut self, update: <InMemory<H> as StateBackend<H>>::Transaction) -> error::Result<()> {
@@ -602,7 +602,7 @@ where
 		let old_state = self.state_at(BlockId::Hash(Default::default()))?;
 		Ok(BlockImportOperation {
 			pending_block: None,
-			pending_authorities: None,
+			pending_cache: Default::default(),
 			old_state,
 			new_state: None,
 			changes_trie_update: None,
@@ -644,7 +644,7 @@ where
 			self.blockchain.insert(hash, header, justification, body, pending_block.state)?;
 			// dumb implementation - store value for each block
 			if pending_block.state.is_best() {
-				self.blockchain.cache.insert(parent_hash, operation.pending_authorities);
+				self.blockchain.cache.insert(parent_hash, operation.pending_cache);
 			}
 		}
 
@@ -711,19 +711,19 @@ where
 }
 
 impl<Block: BlockT> Cache<Block> {
-	fn insert(&self, at: Block::Hash, authorities: Option<Vec<AuthorityIdFor<Block>>>) {
-		self.authorities_at.write().insert(at, authorities);
+	fn insert(&self, at: Block::Hash, data: HashMap<Vec<u8>, Vec<u8>>) {
+		self.cache.write().insert(at, data);
 	}
 }
 
 impl<Block: BlockT> blockchain::Cache<Block> for Cache<Block> {
-	fn authorities_at(&self, block: BlockId<Block>) -> Option<Vec<AuthorityIdFor<Block>>> {
+	fn get_at(&self, key: &[u8], block: BlockId<Block>) -> Option<Vec<u8>> {
 		let hash = match block {
 			BlockId::Hash(hash) => hash,
 			BlockId::Number(number) => self.storage.read().hashes.get(&number).cloned()?,
 		};
 
-		self.authorities_at.read().get(&hash).cloned().unwrap_or(None)
+		self.cache.read().get(&hash).and_then(|c| c.get(key).cloned())
 	}
 }
 
@@ -748,12 +748,12 @@ impl<H: Hasher> state_machine::ChangesTrieStorage<H> for ChangesTrieStorage<H> w
 }
 
 /// Insert authorities entry into in-memory blockchain cache. Extracted as a separate function to use it in tests.
-pub fn cache_authorities_at<Block: BlockT>(
+pub fn cache_at<Block: BlockT>(
 	blockchain: &Blockchain<Block>,
 	at: Block::Hash,
-	authorities: Option<Vec<AuthorityIdFor<Block>>>
+	data: HashMap<Vec<u8>, Vec<u8>>,
 ) {
-	blockchain.cache.insert(at, authorities);
+	blockchain.cache.insert(at, data);
 }
 
 /// Check that genesis storage is valid.

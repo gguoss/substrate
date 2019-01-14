@@ -33,7 +33,7 @@ use runtime_primitives::{
 	create_runtime_str,
 	traits::{
 		BlindCheckable, BlakeTwo256, Block as BlockT, Extrinsic as ExtrinsicT,
-		GetNodeBlockType, GetRuntimeBlockType,
+		GetNodeBlockType, GetRuntimeBlockType, AuthorityIdFor,
 	},
 };
 use runtime_version::RuntimeVersion;
@@ -256,10 +256,6 @@ cfg_if! {
 					version()
 				}
 
-				fn authorities() -> Vec<Ed25519AuthorityId> {
-					system::authorities()
-				}
-
 				fn execute_block(block: Block) {
 					system::execute_block(block)
 				}
@@ -339,16 +335,18 @@ cfg_if! {
 			impl consensus_aura::AuraApi<Block> for Runtime {
 				fn slot_duration() -> u64 { 1 }
 			}
+
+			impl consensus_authorities::AuthoritiesApi<Block> for Runtime {
+				fn authorities() -> Vec<AuthorityIdFor<Block>> {
+					crate::system::authorities()
+				}
+			}
 		}
 	} else {
 		impl_runtime_apis! {
 			impl client_api::Core<Block> for Runtime {
 				fn version() -> RuntimeVersion {
 					version()
-				}
-
-				fn authorities() -> Vec<Ed25519AuthorityId> {
-					system::authorities()
 				}
 
 				fn execute_block(block: Block) {
@@ -433,6 +431,12 @@ cfg_if! {
 
 			impl consensus_aura::AuraApi<Block> for Runtime {
 				fn slot_duration() -> u64 { 1 }
+			}
+
+			impl consensus_authorities::AuthoritiesApi<Block> for Runtime {
+				fn authorities() -> Vec<AuthorityIdFor<Block>> {
+					crate::system::authorities()
+				}
 			}
 		}
 	}

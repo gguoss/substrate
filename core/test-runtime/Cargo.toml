@@ -21,6 +21,7 @@ runtime_primitives = { package = "sr-primitives", path = "../sr-primitives", def
 runtime_version = { package = "sr-version", path = "../sr-version", default-features = false }
 runtime_support = { package = "srml-support", path = "../../srml/support", default-features = false }
 cfg-if = "0.1.6"
+consensus_authorities = { package = "substrate-consensus-authorities", path = "../../core/consensus/authorities", default-features = false }
 
 [dev-dependencies]
 substrate-executor = { path = "../executor" }
