@@ -43,7 +43,6 @@ const MAX_NOMINATIONS: usize = 16;
 const MAX_UNSTAKE_THRESHOLD: u32 = 10;
 
 // a wrapper around validation candidates list and some metadata needed for election process. 
-// TODO: do I need #[codec(compact)]? or the derives? 
 #[derive(Clone, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Candidate<AccountId, Balance: HasCompact> {
@@ -57,8 +56,7 @@ pub struct Candidate<AccountId, Balance: HasCompact> {
 	score: Perquill,
 }
 
-// a wrapper around the nomination info of a single nominator for a group of validators.
-// TODO: do I need #[codec(compact)]? or the derives? 
+// a wrapper around the nomination info of a single nominator for a group of validators. 
 #[derive(Clone, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Nominations<AccountId, Balance: HasCompact> {
@@ -667,7 +665,6 @@ impl<T: Trait> Module<T> {
 		// Reassign all Stakers.
 		// Map of (would-be) validator account to amount of stake backing it.
 		
-		// rounds of election, number of candidates to choose.
 		let rounds = <ValidatorCount<T>>::get() as usize;
 		let mut elected_candidates: Vec<Candidate<T::AccountId, BalanceOf<T>>> = vec![];
 
@@ -682,34 +679,35 @@ impl<T: Trait> Module<T> {
 			}
 		}).collect::<Vec<Candidate<T::AccountId, BalanceOf<T>>>>();
 		
+		// Second, we collect the nominators with the associated votes. 
+		// Also collect approval stake along the way.
+		let mut nominations = <Nominators<T>>::enumerate().map(|(who, nominees)| {
+			let mut nominator_stake = BalanceOf::<T>::zero();
+			for n in &nominees {
+				if let Some(index) = candidates.iter().position(|i| i.who == *n) {
+					nominator_stake = Self::stash_balance(&who);;
+					candidates[index].approval_stake += nominator_stake;
+				}
+			}
+
+			Nominations {
+				who, 
+				nominees: nominees.into_iter()
+					.map(|n| Vote {who: n, load: Perquill::zero(), backing_stake: BalanceOf::<T>::zero()})
+					.collect::<Vec<Vote<T::AccountId, BalanceOf<T>>>>(),
+				stake: nominator_stake,
+				load : Perquill::zero(),
+			}
+		}).collect::<Vec<Nominations<T::AccountId, BalanceOf<T>>>>();
+
+		// TODO: is this a valid optimization? Maybe someone votes with stake == 0?
+		// candidates who have 0 stake => have no votes. best to kick them out not.
+		candidates = candidates.into_iter().filter(|c| c.approval_stake > BalanceOf::<T>::zero())
+			.collect::<Vec<Candidate<T::AccountId, BalanceOf<T>>>>();
+
 		// otherwise there is no need to have election
+		// TODO: if we want to throw phragmen in a func, this is a good place.
 		if candidates.len() > rounds {
-			// Second, we collect the nominators with the associated votes. 
-			// Also collect approval stake along the way.
-			let mut nominations = <Nominators<T>>::enumerate().map(|(who, nominees)| {
-				let mut nominator_stake = BalanceOf::<T>::zero();
-				for n in &nominees {
-					if let Some(index) = candidates.iter().position(|i| i.who == *n) {
-						nominator_stake = Self::stash_balance(&who);;
-						candidates[index].approval_stake += nominator_stake;
-					}
-				}
-
-				Nominations {
-					who, 
-					nominees: nominees.into_iter()
-						.map(|n| Vote {who: n, load: Perquill::zero(), backing_stake: BalanceOf::<T>::zero()})
-						.collect::<Vec<Vote<T::AccountId, BalanceOf<T>>>>(),
-					stake: nominator_stake,
-					load : Perquill::zero(),
-				}
-			}).collect::<Vec<Nominations<T::AccountId, BalanceOf<T>>>>();
-
-			// TODO: is this a valid optimization? Maybe someone votes with stake == 0?
-			// candidates who have 0 stake => have no votes. best to kick them out not.
-			candidates = candidates.into_iter().filter(|c| c.approval_stake > BalanceOf::<T>::zero())
-				.collect::<Vec<Candidate<T::AccountId, BalanceOf<T>>>>();
-
 			// Main election loop
 			for _round in 0..rounds {
 				// Loop 1: initialize score
@@ -736,6 +734,7 @@ impl<T: Trait> Module<T> {
 				}
 
 				// Find the best 
+				println!("Candidates {:?}", candidates);
 				let (winner_index, _) = candidates.iter().enumerate().min_by_key(|&(_i, c)| c.score.encode_as())
 					.expect("candidates length is checked to be >0; qed");
 
@@ -767,6 +766,7 @@ impl<T: Trait> Module<T> {
 		}
 		else { // end of `if candidates.len() > rounds`
 			// if we don't have enough candidates, just choose all.
+			// TODO: but what if it is less than MinValidators?
 			elected_candidates = candidates;
 		}		
 

@@ -323,6 +323,11 @@ fn staking_should_work() {
 		assert_ok!(Staking::set_bonding_duration(2));
 		assert_eq!(Staking::bonding_duration(), 2);
 
+		// bond one account pair and state interest in nomination.
+		// this is needed to keep 10 and 20 in the validator list with phragmen
+		for i in 1..5 { Balances::set_free_balance(&i, 1000); }
+		assert_ok!(Staking::bond(Origin::signed(1), 2, 500, RewardDestination::default()));
+		assert_ok!(Staking::nominate(Origin::signed(2), vec![10, 20, 4]));
 
 		// --- Block 1: 
 		System::set_block_number(1);
@@ -354,8 +359,8 @@ fn staking_should_work() {
 		System::set_block_number(3);
 		Session::check_rotate_session(System::block_number());
 
-		// TODO: the assertion in the section should be changed to something in sync with how phragmen works.
-		// for now just check that some arbitrary "two validators" have been chosen.
+		// the votes for all three accounts are the same, 500 each, 
+		// 20 and 4 have more staked value, 1500 and 2000 respectively, will be chosen.
 		assert_eq!(Session::validators().len(), 2);
 		assert_eq!(Session::validators(), vec![4, 20]);
 		assert_eq!(Staking::current_era(), 1);
@@ -380,9 +385,10 @@ fn staking_should_work() {
 		assert_eq!(Staking::current_era(), 1);
 
 
-		// --- Block 6: 4 will be not be a validator as it has nothing in stash.
+		// --- Block 6: 4 will not be a validator as it has nothing in stash.
 		System::set_block_number(6);
 		Session::check_rotate_session(System::block_number());
+		assert_eq!(Staking::current_era(), 2);
 		assert_eq!(Session::validators().contains(&4), false); 
 	});
 }
@@ -430,10 +436,10 @@ fn nominating_and_rewards_should_work() {
 		for i in 1..5 { assert_eq!(Balances::total_balance(&i), initial_balance); }
 
 		// bond two account pairs and state interest in nomination.
-		// 2 will nominate for 10, 10 has 1000 in stash, 500 will be 1/3 of the total 1500 
+		// 2 will nominate for 10,
 		assert_ok!(Staking::bond(Origin::signed(1), 2, 500, RewardDestination::Controller));
 		assert_ok!(Staking::nominate(Origin::signed(2), vec![10, 20, 30]));
-		// 4 will nominate for 20, 20 has 2000 in stash, 500 will be 1/5 of the total 2500 
+		// 4 will nominate for 20,
 		assert_ok!(Staking::bond(Origin::signed(3), 4, 500, RewardDestination::Stash));
 		assert_ok!(Staking::nominate(Origin::signed(4), vec![10, 20, 40]));
 	
@@ -442,10 +448,10 @@ fn nominating_and_rewards_should_work() {
 		assert_eq!(Staking::current_era(), 1);
 		// 10 and 20 have more votes, they will be chosen by phragmen.
 		assert_eq!(Session::validators(), vec![20, 10]);
-		// avalidators must have already received some rewards.
+		// validators must have already received some rewards.
 		assert_eq!(Balances::total_balance(&10), initial_balance + session_reward);
 		assert_eq!(Balances::total_balance(&20), initial_balance + session_reward);
-		// check the staked value of all parties.
+		// ------ check the staked value of all parties.
 		// total expo of 10
 		assert_eq!(Staking::stakers(10).own, 1000);
 		assert_eq!(Staking::stakers(10).total, 1000 + 500);
@@ -474,7 +480,7 @@ fn nominating_and_rewards_should_work() {
 		assert_eq!(Balances::total_balance(&10), initial_balance + session_reward + 4*new_session_reward/6) ;
 
 		// Nominator 4: has 250 / 1500 from 10 + 250 / 2500 from 20's reward. ==> 1/6 + 1/10 
-		// This means that the reward will go to 3, which is bonded as the stash of 4.
+		// This nominator chose stash as the reward destination. This means that the reward will go to 3, which is bonded as the stash of 4.
 		assert_eq!(Balances::total_balance(&3), initial_balance + (new_session_reward/6 + new_session_reward/10));
 		// The Associated validator will get the other 8/10 - 2500 minus 1/10(250) by each nominator
 		assert_eq!(Balances::total_balance(&20), initial_balance + session_reward + 8*new_session_reward/10);
@@ -1049,5 +1055,4 @@ fn on_free_balance_zero_stash_removes_nominator() {
 #[test]
 fn phragmen_poc() {
 	// Tests the POC test of the phragmen, mentioned in the paper and reference implementation.
-	unimplemented!();
 }
