@@ -145,16 +145,20 @@ impl ExtBuilder {
 		t.extend(balances::GenesisConfig::<Test>{
 			balances: if self.monied {
 				if self.reward > 0 {
-					vec![(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor), (10, balance_factor), (11, balance_factor * 10), (20, balance_factor), (21, balance_factor * 20)]
+					vec![(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor), (10, balance_factor), (11, balance_factor * 1000), (20, balance_factor), (21, balance_factor * 2000)]
 				} else {
 					vec![(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor)]
 				}
 			} else {
+<<<<<<< HEAD
 				vec![
 					(10, balance_factor), (11, balance_factor * 10),
 					(20, balance_factor), (21, balance_factor * 20),
 					(30, balance_factor), (31, balance_factor * 30),
 					(40, balance_factor), (41, balance_factor * 40)]
+=======
+				vec![(10, balance_factor), (11, balance_factor * 1000), (20, balance_factor), (21, balance_factor * 2000)]
+>>>>>>> gav-new-staking
 			},
 			existential_deposit: self.existential_deposit,
 			transfer_fee: 0,
