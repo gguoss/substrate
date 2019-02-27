@@ -738,7 +738,6 @@ impl<T: Trait> Module<T> {
 				}
 
 				// Find the best 
-				println!("Candidates {:?}", candidates);
 				let (winner_index, _) = candidates.iter().enumerate().min_by_key(|&(_i, c)| c.score.encode_as())
 					.expect("candidates length is checked to be >0; qed");
 

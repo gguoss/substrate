@@ -336,15 +336,12 @@ fn staking_should_work() {
 		assert_ok!(Staking::set_bonding_duration(2));
 		assert_eq!(Staking::bonding_duration(), 2);
 
-<<<<<<< HEAD
 		// bond one account pair and state interest in nomination.
 		// this is needed to keep 10 and 20 in the validator list with phragmen
 		for i in 1..5 { Balances::set_free_balance(&i, 1000); }
 		assert_ok!(Staking::bond(Origin::signed(1), 2, 500, RewardDestination::default()));
 		assert_ok!(Staking::nominate(Origin::signed(2), vec![10, 20, 4]));
 
-=======
->>>>>>> gav-new-staking
 		// --- Block 1: 
 		System::set_block_number(1);
 		// give the man some coins 
