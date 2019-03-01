@@ -708,23 +708,31 @@ fn max_unstake_threshold_works() {
 		assert_eq!(Balances::free_balance(&10), Balances::free_balance(&20));
 		assert_eq!(Staking::offline_slash_grace(), 0);
 		assert_eq!(Staking::current_offline_slash(), 20);
-		// Account 10 will have unstake_threshold 10
-		<Validators<Test>>::insert(10, ValidatorPrefs {
+		// Account 10 will have max unstake_threshold
+		assert_ok!(Staking::validate(Origin::signed(10), ValidatorPrefs {
 			unstake_threshold: MAX_UNSTAKE_THRESHOLD,
 			validator_payment: 0,
-		});
-		// Account 20 will have unstake_threshold 100, which should be limited to 10
+		}));
+		// Account 20 could not set their unstake_threshold past 10
+		assert_noop!(Staking::validate(Origin::signed(20), ValidatorPrefs {
+			unstake_threshold: 11,
+			validator_payment: 0}),
+			"unstake threshold too large"
+		);
+		// Give Account 20 unstake_threshold 11 anyway, should still be limited to 10
 		<Validators<Test>>::insert(20, ValidatorPrefs {
-			unstake_threshold: 100,
+			unstake_threshold: 11,
 			validator_payment: 0,
 		});
+
+		// Make slot_stake really large, as to not affect punishment curve
+		<SlotStake<Test>>::put(u64::max_value());
+		// Confirm `slot_stake` is greater than exponential punishment, else math below will be different
+		assert!(Staking::slot_stake() > 2_u64.pow(MAX_UNSTAKE_THRESHOLD) * 20);
 
 		// Report each user 1 more than the max_unstake_threshold
 		Staking::on_offline_validator(10, MAX_UNSTAKE_THRESHOLD as usize + 1);
 		Staking::on_offline_validator(20, MAX_UNSTAKE_THRESHOLD as usize + 1);
-
-		// Confirm `slot_stake` is greater than exponential punishment, else math below will be different
-		assert!(Staking::slot_stake() > 2_u64.pow(MAX_UNSTAKE_THRESHOLD) * 20);
 
 		// Show that each balance only gets reduced by 2^max_unstake_threshold
 		assert_eq!(Balances::free_balance(&10), u64::max_value() - 2_u64.pow(MAX_UNSTAKE_THRESHOLD) * 20);
@@ -839,6 +847,7 @@ fn validator_payment_prefs_work() {
 	|| {
 		let session_reward = 10;
 		let validator_cut = 5;
+		let validator_initial_balance = Balances::total_balance(&11);
 		// Initial config should be correct
 		assert_eq!(Staking::era_length(), 9);
 		assert_eq!(Staking::sessions_per_era(), 3);
@@ -850,11 +859,13 @@ fn validator_payment_prefs_work() {
 
 		// check the balance of a validator accounts.
 		assert_eq!(Balances::total_balance(&10), 1); 
+		// check the balance of a validator's stash accounts.
+		assert_eq!(Balances::total_balance(&11), validator_initial_balance); 
 		// and the nominator (to-be)
 		assert_eq!(Balances::total_balance(&2), 20); 
 
 		// add a dummy nominator.
-		// NOTE: this nominator is being added 'manually'.
+		// NOTE: this nominator is being added 'manually', use '.nominate()' to do it realistically.
 		<Stakers<Test>>::insert(&10, Exposure {
 			own: 500, // equal division indicates that the reward will be equally divided among validator and nominator.
 			total: 1000,
@@ -891,14 +902,18 @@ fn validator_payment_prefs_work() {
 
 		block = 9; // Block 9 => Session 3 => Era 1
 		System::set_block_number(block);
-		Timestamp::set_timestamp(block*5);  // back to being punktlisch. no delayss
+		Timestamp::set_timestamp(block*5); 
 		Session::check_rotate_session(System::block_number());
 		assert_eq!(Staking::current_era(), 1);
 		assert_eq!(Session::current_index(), 3);
 
 		// whats left to be shared is the sum of 3 rounds minus the validator's cut.
 		let shared_cut = 3 * session_reward - validator_cut;
-		assert_eq!(Balances::total_balance(&10), 1 + shared_cut/2 + validator_cut);
+		// Validator's payee is Staked account, 11, reward will be paid here.
+		assert_eq!(Balances::total_balance(&11), validator_initial_balance + shared_cut/2 + validator_cut);
+		// Controller account will not get any reward.
+		assert_eq!(Balances::total_balance(&10), 1);
+		// Rest of the reward will be shared and paid to the nominator in stake.
 		assert_eq!(Balances::total_balance(&2), 20 + shared_cut/2);
 	});
 }
@@ -968,45 +983,37 @@ fn correct_number_of_validators_are_chosen() {
 /*
 #[test]
 fn slot_stake_is_least_staked_validator_and_limits_maximum_punishment() {
+	// TODO: Complete this test!
 	// Test that slot_stake is determined by the least staked validator
 	// Test that slot_stake is the maximum punishment that can happen to a validator
-	with_externalities(&mut ExtBuilder::default().build(), || {
-				println!("SLOT STAKE: {:?}", <SlotStake<Test>>::get());
-				println!("SLOT STAKE: {:?}", <SlotStake<Test>>::put(1000));
+	with_externalities(&mut ExtBuilder::default()
+		.session_length(1)
+		.sessions_per_era(1)
+		.build(),
+	|| {
+		// Confirm validator count is 2
+		assert_eq!(Staking::validator_count(), 2);
+		// Confirm account 10 and 20 are validators
+		assert!(<Validators<Test>>::exists(&10) && <Validators<Test>>::exists(&20));
+		// Confirm 10 has less stake than 20
+		assert!(Staking::stakers(&10).total < Staking::stakers(&20).total);
 
+		// We set account 10 staking total to 1000
+		assert_eq!(Staking::stakers(&10).total, 1000);
+		// We confirm initialized slot_stake is this value
+		assert_eq!(Staking::slot_stake(), Staking::stakers(&10).total);
 
-		// Give account 10 some balance
-		Balances::set_free_balance(&10, 1000);
-		// Confirm account 10 is a validator
-		assert!(<Validators<Test>>::exists(&10));
-		// Validators get slashed immediately
-		assert_eq!(Staking::offline_slash_grace(), 0);
-		// Unstake threshold is 3
-		assert_eq!(Staking::validators(&10).unstake_threshold, 3);
-		// Account 10 has not been slashed before
-		assert_eq!(Staking::slash_count(&10), 0);
-		// Account 10 has the funds we just gave it
-		assert_eq!(Balances::free_balance(&10), 1000);
+		// Now lets lower account 20 stake
+		<Stakers<Test>>::insert(&20, Exposure { total: 69, own: 69, others: vec![] });
+		
+		// Change to a new era to update slot_stake
+		System::set_block_number(1);
+		Timestamp::set_timestamp(5);
+		Session::check_rotate_session(System::block_number());
+		assert_eq!(Staking::current_era(), 1);
 
-		// Slot stake should be lowest total stake from config
-		println!("SLOT STAKE: {:?}", Staking::slot_stake());
-		println!("SLOT STAKE: {:?}", <SlotStake<Test>>::get());
-		println!("STAKER 10 TOTAL {:?}", Staking::stakers(&10).total );
-		println!("STAKER 10 TOTAL {:?}", Staking::stakers(&20).total );
-
-
-		// Report account 10 as offline, one greater than unstake threshold
-		Staking::on_offline_validator(10, 4);
-		// Confirm user has been reported
-		assert_eq!(Staking::slash_count(&10), 4);
-		// Confirm `slot_stake` is greater than exponential punishment, else math below will be different
-		assert!(Staking::slot_stake() > 2_u64.pow(3) * 20);
-		// Confirm balance has been reduced by 2^unstake_threshold * current_offline_slash()
-		assert_eq!(Balances::free_balance(&10), 1000 - 2_u64.pow(3) * 20);
-		// Confirm account 10 has been removed as a validator
-		assert!(!<Validators<Test>>::exists(&10));
-		// A new era is forced due to slashing
-		assert!(Staking::forcing_new_era().is_some());
+		// Check that slot stake is now the lower stake value
+		assert_eq!(Staking::slot_stake(), 69);
 	});
 }
 */

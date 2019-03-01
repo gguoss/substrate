@@ -310,7 +310,7 @@ decl_storage! {
 		///
 		/// This is used to derive rewards and punishments.
 		pub SlotStake get(slot_stake) build(|config: &GenesisConfig<T>| {
-			config.stakers.iter().map(|&(_, _, value)| value).min()
+			config.stakers.iter().map(|&(_, _, value)| value).min().unwrap_or_default()
 		}): BalanceOf<T>;
 
 		/// The number of times a given validator has been reported offline. This gets decremented by one each era that passes.
@@ -426,6 +426,7 @@ decl_module! {
 		fn validate(origin, prefs: ValidatorPrefs<BalanceOf<T>>) {
 			let controller = ensure_signed(origin)?;
 			let _ledger = Self::ledger(&controller).ok_or("not a controller")?;
+			ensure!(prefs.unstake_threshold <= MAX_UNSTAKE_THRESHOLD, "unstake threshold too large");
 			<Nominators<T>>::remove(&controller);
 			<Validators<T>>::insert(controller, prefs);
 		}
@@ -865,6 +866,8 @@ impl<T: Trait> OnSessionChange<T::Moment> for Module<T> {
 }
 
 impl<T: Trait> EnsureAccountLiquid<T::AccountId, BalanceOf<T>> for Module<T> {
+	// TODO: Consider replacing uses of this function in favor for ensure_account_can_withdraw
+	// Then remove the function
 	fn ensure_account_liquid(who: &T::AccountId) -> Result {
 		if <Bonded<T>>::exists(who) {
 			Err("stash accounts are not liquid")
