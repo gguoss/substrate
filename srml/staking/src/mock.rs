@@ -80,6 +80,7 @@ pub struct ExtBuilder {
 	monied: bool,
 	reward: u64,
 	validator_pool: bool,
+	nominate: bool,
 }
 
 impl Default for ExtBuilder {
@@ -91,7 +92,8 @@ impl Default for ExtBuilder {
 			current_era: 0,
 			monied: true,
 			reward: 10,
-			validator_pool: false
+			validator_pool: false,
+			nominate: false,
 		}
 	}
 }
@@ -126,6 +128,11 @@ impl ExtBuilder {
 		self.validator_pool = validator_pool;
 		self
 	}
+	pub fn nominate(mut self, nominate: bool) -> Self {
+		// NOTE: this only sets a dummy nominator for tests that want 10 and 20 (default validators) to be chosen by default.
+		self.nominate = nominate;
+		self
+	}
 	pub fn build(self) -> runtime_io::TestExternalities<Blake2Hasher> {
 		let mut t = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
 		let balance_factor = if self.existential_deposit > 0 {
@@ -145,7 +152,9 @@ impl ExtBuilder {
 		t.extend(balances::GenesisConfig::<Test>{
 			balances: if self.monied {
 				if self.reward > 0 {
-					vec![(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor), (10, balance_factor), (11, balance_factor * 1000), (20, balance_factor), (21, balance_factor * 2000)]
+					vec![
+						(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor),
+						(10, balance_factor), (11, balance_factor * 1000), (20, balance_factor), (21, balance_factor * 2000)]
 				} else {
 					vec![(1, 10 * balance_factor), (2, 20 * balance_factor), (3, 300 * balance_factor), (4, 400 * balance_factor)]
 				}
@@ -178,6 +187,7 @@ impl ExtBuilder {
 			current_offline_slash: 20,
 			offline_slash_grace: 0,
 			invulnerables: vec![],
+			nominators: if self.nominate { vec![(10, vec![20]), (20, vec![10])]} else { vec![] },
 		}.build_storage().unwrap().0);
 		t.extend(timestamp::GenesisConfig::<Test>{
 			period: 5,
