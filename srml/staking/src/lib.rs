@@ -42,7 +42,7 @@ const DEFAULT_MINIMUM_VALIDATOR_COUNT: u32 = 4;
 const MAX_NOMINATIONS: usize = 16;
 const MAX_UNSTAKE_THRESHOLD: u32 = 10;
 
-// a wrapper around validation candidates list and some metadata needed for election process. 
+// a wrapper around validation candidates list and some metadata needed for election process.
 #[derive(Clone, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Candidate<AccountId, Balance: HasCompact> {
@@ -56,7 +56,7 @@ pub struct Candidate<AccountId, Balance: HasCompact> {
 	score: Perquill,
 }
 
-// a wrapper around the nomination info of a single nominator for a group of validators. 
+// a wrapper around the nomination info of a single nominator for a group of validators.
 #[derive(Clone, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Nominations<AccountId, Balance: HasCompact> {
@@ -70,7 +70,7 @@ pub struct Nominations<AccountId, Balance: HasCompact> {
 	load: Perquill,
 }
 
-// Wrapper around a nominator vote and the load of that vote. Refered to as 'edge' in the 
+// Wrapper around a nominator vote and the load of that vote. Refered to as 'edge' in the
 // phragmenreference implementation.
 #[derive(Clone, Encode, Decode)]
 #[cfg_attr(feature = "std", derive(Debug))]
@@ -254,7 +254,7 @@ decl_storage! {
 		pub Payee get(payee): map T::AccountId => RewardDestination;
 
 		/// The set of keys are all controllers that want to validate.
-		/// 
+		///
 		/// The values are the preferences that a validator has.
 		pub Validators get(validators) build(|config: &GenesisConfig<T>| {
 			config.stakers.iter().map(|(_stash, controller, _value)| (
@@ -264,9 +264,14 @@ decl_storage! {
 		}): linked_map T::AccountId => ValidatorPrefs<BalanceOf<T>>;
 
 		/// The set of keys are all controllers that want to nominate.
-		/// 
+		///
 		/// The value are the nominations.
-		pub Nominators get(nominators): linked_map T::AccountId => Vec<T::AccountId>;
+		pub Nominators get(nominators) build(|config: &GenesisConfig<T>| {
+			config.nominators.iter().map(|(who, nominees)| (
+				who.clone(),
+				nominees.clone(),
+			)).collect::<Vec<_>>()
+		}): linked_map T::AccountId => Vec<T::AccountId>;
 
 		/// Nominators for a particular account that is in action right now. You can't iterate through validators here,
 		/// but you can find them in the `sessions` module.
@@ -284,7 +289,7 @@ decl_storage! {
 		// The historical validators and their nominations for a given era. Stored as a trie root of the mapping
 		// `T::AccountId` => `Exposure<T::AccountId, BalanceOf<T>>`, which is just the contents of `Stakers`,
 		// under a key that is the `era`.
-		// 
+		//
 		// Every era change, this will be appended with the trie root of the contents of `Stakers`, and the oldest
 		// entry removed down to a specific number of entries (probably around 90 for a 3 month history).
 //		pub HistoricalStakers get(historical_stakers): map T::BlockNumber => Option<H256>;
@@ -324,6 +329,7 @@ decl_storage! {
 	}
 	add_extra_genesis {
 		config(stakers): Vec<(T::AccountId, T::AccountId, BalanceOf<T>)>;
+		config(nominators): Vec<(T::AccountId, Vec<T::AccountId>)>
 	}
 }
 
@@ -355,9 +361,9 @@ decl_module! {
 
 		/// Add some extra amount that have appeared in the stash `free_balance` into the balance up for
 		/// staking.
-		/// 
+		///
 		/// Use this if there are additional funds in your stash account that you wish to bond.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn bond_extra(origin, max_additional: BalanceOf<T>) {
 			let controller = ensure_signed(origin)?;
@@ -373,14 +379,14 @@ decl_module! {
 		}
 
 		/// Schedule a portion of the stash to be unlocked ready for transfer out after the bond
-		/// period ends. If this leaves an amount actively bonded less than 
+		/// period ends. If this leaves an amount actively bonded less than
 		/// T::Currency::existential_deposit(), then it is increased to the full amount.
-		/// 
+		///
 		/// Once the unlock period is done, you can call `withdraw_unbonded` to actually move
-		/// the funds out of management ready for transfer. 
-		/// 
+		/// the funds out of management ready for transfer.
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
-		/// 
+		///
 		/// See also `withdraw_unbonded`.
 		fn unbond(origin, #[compact] value: BalanceOf<T>) {
 			let controller = ensure_signed(origin)?;
@@ -405,12 +411,12 @@ decl_module! {
 		}
 
 		/// Remove any unlocked chunks from the `unlocking` queue from our management.
-		/// 
+		///
 		/// This essentially frees up that balance to be used by the stash account to do
 		/// whatever it wants.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
-		/// 
+		///
 		/// See also `unbond`.
 		fn withdraw_unbonded(origin) {
 			let controller = ensure_signed(origin)?;
@@ -421,7 +427,7 @@ decl_module! {
 		/// Declare the desire to validate for the origin controller.
 		///
 		/// Effects will be felt at the beginning of the next era.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn validate(origin, prefs: ValidatorPrefs<BalanceOf<T>>) {
 			let controller = ensure_signed(origin)?;
@@ -434,7 +440,7 @@ decl_module! {
 		/// Declare the desire to nominate `targets` for the origin controller.
 		///
 		/// Effects will be felt at the beginning of the next era.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn nominate(origin, targets: Vec<<T::Lookup as StaticLookup>::Source>) {
 			let controller = ensure_signed(origin)?;
@@ -452,7 +458,7 @@ decl_module! {
 		/// Declare no desire to either validate or nominate.
 		///
 		/// Effects will be felt at the beginning of the next era.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn chill(origin) {
 			let controller = ensure_signed(origin)?;
@@ -464,7 +470,7 @@ decl_module! {
 		/// (Re-)set the payment target for a controller.
 		///
 		/// Effects will be felt at the beginning of the next era.
-		/// 
+		///
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn set_payee(origin, payee: RewardDestination) {
 			let controller = ensure_signed(origin)?;
@@ -684,7 +690,7 @@ impl<T: Trait> Module<T> {
 			}
 		}).collect::<Vec<Candidate<T::AccountId, BalanceOf<T>>>>();
 		
-		// Second, we collect the nominators with the associated votes. 
+		// Second, we collect the nominators with the associated votes.
 		// Also collect approval stake along the way.
 		let mut nominations = <Nominators<T>>::enumerate().map(|(who, nominees)| {
 			let mut nominator_stake = BalanceOf::<T>::zero();
@@ -696,7 +702,7 @@ impl<T: Trait> Module<T> {
 			}
 
 			Nominations {
-				who, 
+				who,
 				nominees: nominees.into_iter()
 					.map(|n| Vote {who: n, load: Perquill::zero(), backing_stake: BalanceOf::<T>::zero()})
 					.collect::<Vec<Vote<T::AccountId, BalanceOf<T>>>>(),
@@ -738,7 +744,7 @@ impl<T: Trait> Module<T> {
 					}
 				}
 
-				// Find the best 
+				// Find the best
 				let (winner_index, _) = candidates.iter().enumerate().min_by_key(|&(_i, c)| c.score.encode_as())
 					.expect("candidates length is checked to be >0; qed");
 
@@ -784,7 +790,8 @@ impl<T: Trait> Module<T> {
 		}
 
 		// Figure out the minimum stake behind a slot.
-		let slot_stake = elected_candidates.last().map(|i| i.exposure.total).unwrap_or_default();
+		let slot_stake = elected_candidates.iter().min_by_key(|c| c.exposure.total)
+			.expect("elected candidates cannoto be empty").exposure.total;
 		<SlotStake<T>>::put(&slot_stake);
 
 		// Populate Stakers.
