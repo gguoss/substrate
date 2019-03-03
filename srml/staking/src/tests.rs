@@ -967,14 +967,54 @@ fn bond_extra_works() {
 	});
 }
 
+
+
 #[test]
-fn withdraw_unbonded_works() {
-	// TODO: Learn what it is and test it
+fn bond_extra_and_withdraw_unbonded_works() {
+	// TODO: Should test
+	// * Given an account being binded [and chosen as a validator](not mandatory)
+	// * It can add extra funds to the bonded account.
+	// * it can unbond a portion of its funds from the stash account.
+	// * Once the unbonding period is done, it can actually take the funds out of the stash.
+	with_externalities(&mut ExtBuilder::default()
+		.nominate(true)
+		.sessions_per_era(1)
+		.session_length(1)
+		.reward(10) // it is default, just for verbosity
+		.build(), 
+	|| {
+		// Set payee to controller. avoids confusion
+		assert_ok!(Staking::set_payee(Origin::signed(10), RewardDestination::Controller));
+
+		// Initial config should be correct
+		assert_eq!(Staking::sessions_per_era(), 1);
+		assert_eq!(Staking::current_era(), 0);
+		assert_eq!(Session::current_index(), 0);
+
+		assert_eq!(Staking::current_session_reward(), 10);
+
+		// check the balance of a validator accounts.
+		assert_eq!(Balances::total_balance(&10), 1);
+
+		// confirm that 10 is a normal validator and gets paid at the end of the era.
+		System::set_block_number(1);
+		Timestamp::set_timestamp(5);	// on time.
+		Session::check_rotate_session(System::block_number()); // QUESTIONS: why this matters ?
+		assert_eq!(Staking::current_era(), 1);
+		assert_eq!(Session::current_index(), 1);
+
+		// NOTE: despite having .nominate() in extBuilder, 20 doesn't have a share since
+		// rewards are paid before election in new_era()
+		assert_eq!(Balances::total_balance(&10), 1 + 10);
+
+		
+	})
 }
 
 #[test]
 fn reporting_misbehaviors_work() {
 	// TODO: Does this code exist?
+	// UPDATE: afaik this is invalid and does not exist.
 }
 
 #[test]
@@ -1174,6 +1214,6 @@ fn phragmen_poc() {
 }
 
 #[test]
-fn no_one_nominates() {
+fn no_one_nominates_does_not_panic() {
 	// Test the behavior when no one is nominating.
 }
