@@ -220,7 +220,7 @@ fn rewards_should_work() {
 		// Block 3 => Session 1 => Era 0
 		System::set_block_number(block);
 		Timestamp::set_timestamp(block*5);	// on time.
-		Session::check_rotate_session(System::block_number()); // QUESTIONS: why this matters ?
+		Session::check_rotate_session(System::block_number()); 
 		assert_eq!(Staking::current_era(), 0);
 		assert_eq!(Session::current_index(), 1);
 
@@ -384,7 +384,7 @@ fn staking_should_work() {
 
 		// unlock the entire stashed value.
 		Staking::unbond(Origin::signed(4), Staking::ledger(&4).unwrap().active).unwrap();
-		Staking::chill(Origin::signed(4));
+		Staking::chill(Origin::signed(4)).unwrap();
 		
 		Session::check_rotate_session(System::block_number());
 		// nothing should be changed so far.
@@ -940,6 +940,8 @@ fn consolidate_unlocked_works() {
 #[test]
 fn bond_extra_works() {
 	// Tests that extra `free_balance` in the stash can be added to stake
+	// NOTE: this tests only verifies `StakingLedger` for correct updates. 
+	// See `bond_extra_and_withdraw_unbonded_works` for more details and updates on `Exposure`.
 	with_externalities(&mut ExtBuilder::default().build(),
 	|| {
 		// Check that account 10 is a validator
@@ -971,7 +973,7 @@ fn bond_extra_works() {
 
 #[test]
 fn bond_extra_and_withdraw_unbonded_works() {
-	// TODO: Should test
+	// * Should test
 	// * Given an account being binded [and chosen as a validator](not mandatory)
 	// * It can add extra funds to the bonded account.
 	// * it can unbond a portion of its funds from the stash account.
@@ -986,6 +988,14 @@ fn bond_extra_and_withdraw_unbonded_works() {
 		// Set payee to controller. avoids confusion
 		assert_ok!(Staking::set_payee(Origin::signed(10), RewardDestination::Controller));
 
+		// Set unbonding era (bonding_duration) to 2
+		assert_ok!(Staking::set_bonding_duration(2));
+
+		// Give account 11 some large free balance greater than total
+		Balances::set_free_balance(&11, 1000000);
+		// Check the balance of the stash account
+		assert_eq!(Balances::free_balance(&11), 1000000);
+
 		// Initial config should be correct
 		assert_eq!(Staking::sessions_per_era(), 1);
 		assert_eq!(Staking::current_era(), 0);
@@ -998,8 +1008,8 @@ fn bond_extra_and_withdraw_unbonded_works() {
 
 		// confirm that 10 is a normal validator and gets paid at the end of the era.
 		System::set_block_number(1);
-		Timestamp::set_timestamp(5);	// on time.
-		Session::check_rotate_session(System::block_number()); // QUESTIONS: why this matters ?
+		Timestamp::set_timestamp(5);
+		Session::check_rotate_session(System::block_number()); 
 		assert_eq!(Staking::current_era(), 1);
 		assert_eq!(Session::current_index(), 1);
 
@@ -1007,7 +1017,59 @@ fn bond_extra_and_withdraw_unbonded_works() {
 		// rewards are paid before election in new_era()
 		assert_eq!(Balances::total_balance(&10), 1 + 10);
 
+		// Initial state of 10
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { stash: 11, total: 1000, active: 1000, unlocking: vec![] }));
+		assert_eq!(Staking::stakers(&10), Exposure { total: 1000, own: 1000, others: vec![] });
+
+
+		// deposit the extra 100 units 
+		Staking::bond_extra(Origin::signed(10), 100).unwrap();
+
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { stash: 11, total: 1000 + 100, active: 1000 + 100, unlocking: vec![] }));
+		// Exposure is a snapshot! only updated after the next era update.
+		assert_ne!(Staking::stakers(&10), Exposure { total: 1000 + 100, own: 1000 + 100, others: vec![] });
+
+		// trigger next era.
+		System::set_block_number(2);Timestamp::set_timestamp(10);Session::check_rotate_session(System::block_number()); 
+		assert_eq!(Staking::current_era(), 2);
+		assert_eq!(Session::current_index(), 2);
+
+		// ledger should be the same.
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { stash: 11, total: 1000 + 100, active: 1000 + 100, unlocking: vec![] }));
+		// Exposure is now updated.
+		assert_eq!(Staking::stakers(&10), Exposure { total: 1000 + 100, own: 1000 + 100, others: vec![] });
+		// Note that by this point 10 also have received more rewards, but we don't care now.
+		// assert_eq!(Balances::total_balance(&10), 1 + 10 + MORE_REWARD);
+
+		// Unbond almost all of the funds in stash.
+		Staking::unbond(Origin::signed(10), 1000).unwrap();
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { 
+			stash: 11, total: 1000 + 100, active: 100, unlocking: vec![UnlockChunk{ value: 1000, era: 2 + 2}] }));
+
+		// Attempting to free the balances now will fail. 2 eras need to pass.
+		Staking::withdraw_unbonded(Origin::signed(10)).unwrap();
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { 
+			stash: 11, total: 1000 + 100, active: 100, unlocking: vec![UnlockChunk{ value: 1000, era: 2 + 2}] }));
+
+		// trigger next era.
+		System::set_block_number(3);Timestamp::set_timestamp(15);Session::check_rotate_session(System::block_number()); 
+		assert_eq!(Staking::current_era(), 3);
+		assert_eq!(Session::current_index(), 3);
+
+		// nothing yet
+		Staking::withdraw_unbonded(Origin::signed(10)).unwrap();
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { 
+			stash: 11, total: 1000 + 100, active: 100, unlocking: vec![UnlockChunk{ value: 1000, era: 2 + 2}] }));
+
+		// trigger next era.
+		System::set_block_number(4);Timestamp::set_timestamp(20);Session::check_rotate_session(System::block_number()); 
+		assert_eq!(Staking::current_era(), 4);
+		assert_eq!(Session::current_index(), 4);
 		
+		Staking::withdraw_unbonded(Origin::signed(10)).unwrap();
+		// Now the value is free and the staking ledger is updated.
+		assert_eq!(Staking::ledger(&10), Some(StakingLedger { 
+			stash: 11, total: 100, active: 100, unlocking: vec![] }));
 	})
 }
 
@@ -1026,7 +1088,6 @@ fn correct_number_of_validators_are_chosen() {
 
 #[test]
 fn slot_stake_is_least_staked_validator_and_limits_maximum_punishment() {
-	// TODO: Complete this test!
 	// Test that slot_stake is determined by the least staked validator
 	// Test that slot_stake is the maximum punishment that can happen to a validator
 	// Note that rewardDestination is the stash account by default
