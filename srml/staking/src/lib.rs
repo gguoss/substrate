@@ -361,9 +361,9 @@ decl_module! {
 
 		/// Add some extra amount that have appeared in the stash `free_balance` into the balance up for
 		/// staking.
-		///
+		/// 
 		/// Use this if there are additional funds in your stash account that you wish to bond.
-		///
+		/// 
 		/// NOTE: This call must be made by the controller, not the stash.
 		fn bond_extra(origin, max_additional: BalanceOf<T>) {
 			let controller = ensure_signed(origin)?;
@@ -379,14 +379,14 @@ decl_module! {
 		}
 
 		/// Schedule a portion of the stash to be unlocked ready for transfer out after the bond
-		/// period ends. If this leaves an amount actively bonded less than
+		/// period ends. If this leaves an amount actively bonded less than 
 		/// T::Currency::existential_deposit(), then it is increased to the full amount.
-		///
+		/// 
 		/// Once the unlock period is done, you can call `withdraw_unbonded` to actually move
-		/// the funds out of management ready for transfer.
-		///
+		/// the funds out of management ready for transfer. 
+		/// 
 		/// NOTE: This call must be made by the controller, not the stash.
-		///
+		/// 
 		/// See also `withdraw_unbonded`.
 		fn unbond(origin, #[compact] value: BalanceOf<T>) {
 			let controller = ensure_signed(origin)?;
@@ -411,12 +411,12 @@ decl_module! {
 		}
 
 		/// Remove any unlocked chunks from the `unlocking` queue from our management.
-		///
+		/// 
 		/// This essentially frees up that balance to be used by the stash account to do
 		/// whatever it wants.
-		///
+		/// 
 		/// NOTE: This call must be made by the controller, not the stash.
-		///
+		/// 
 		/// See also `unbond`.
 		fn withdraw_unbonded(origin) {
 			let controller = ensure_signed(origin)?;

@@ -410,11 +410,10 @@ fn staking_should_work() {
 
 #[test]
 fn nominating_and_rewards_should_work() {
-	// TODO: This should be rewritten and tested with the Phragmen algorithm
 	// For now it tests a functionality which somehow overlaps with other tests:
 	// the fact that the nominator is rewarded properly.
 	//
-	// PHRAGMEN UPDATE: running this test with the reference impl gives:
+	// PHRAGMEN OUTPUT: running this test with the reference impl gives:
 	//
 	// Votes  [('2', 500, ['10', '20', '30']), ('4', 500, ['10', '20', '40'])]
 	// Sequential Phragmén gives
@@ -919,6 +918,7 @@ fn validator_payment_prefs_work() {
 		// Rest of the reward will be shared and paid to the nominator in stake.
 		assert_eq!(Balances::total_balance(&2), 20 + shared_cut/2);
 	});
+
 }
 
 #[test]
