@@ -4,6 +4,9 @@ use node_template_runtime::{
 	SudoConfig, IndicesConfig, SystemConfig
 };
 use substrate_service;
+use telemetry::TelemetryEndpoints;
+
+const CHAINX_TELEMETRY_URL: &str = "wss://stats.chainx.org/submit/";
 
 // Note this is the URL for the telemetry server
 //const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -39,7 +42,7 @@ impl Alternative {
 	pub(crate) fn load(self) -> Result<ChainSpec, String> {
 		Ok(match self {
 			Alternative::Development => ChainSpec::from_genesis(
-				"Development",
+				"Hanzhou Workshop",
 				"dev",
 				|| testnet_genesis(vec![
 					authority_key("Alice")
@@ -49,8 +52,10 @@ impl Alternative {
 					account_key("Alice")
 				),
 				vec![],
-				None,
-				None,
+				Some(TelemetryEndpoints::new(vec![
+					(CHAINX_TELEMETRY_URL.to_string(), 0),
+				])),
+				Some("First Substrate blockchain"),
 				None,
 				None
 			),
@@ -98,7 +103,7 @@ fn testnet_genesis(initial_authorities: Vec<AuthorityId>, endowed_accounts: Vec<
 			authorities: initial_authorities.clone(),
 		}),
 		timestamp: Some(TimestampConfig {
-			minimum_period: 5, // 10 second block time.
+			minimum_period: 1, // 2 second block time.
 		}),
 		indices: Some(IndicesConfig {
 			ids: endowed_accounts.clone(),

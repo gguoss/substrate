@@ -30,6 +30,7 @@ network = { package = "substrate-network", path = "../core/network" }
 consensus = { package = "substrate-consensus-aura", path = "../core/consensus/aura" }
 substrate-client = {  path = "../core/client" }
 basic-authorship = { package = "substrate-basic-authorship", path = "../core/basic-authorship" }
+telemetry = { package = "substrate-telemetry", path = "../core/telemetry" }
 node-template-runtime = { path = "runtime" }
 
 [build-dependencies]
