@@ -2312,6 +2312,7 @@ dependencies = [
  "substrate-network 2.0.0",
  "substrate-primitives 2.0.0",
  "substrate-service 2.0.0",
+ "substrate-telemetry 2.0.0",
  "substrate-transaction-pool 2.0.0",
  "tokio 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "trie-root 0.12.4 (registry+https://github.com/rust-lang/crates.io-index)",
