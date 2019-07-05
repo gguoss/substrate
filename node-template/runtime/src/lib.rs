@@ -30,6 +30,7 @@ pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
 pub use system::Call as SystemCall;
 pub use sudo::Call as SudoCall;
+pub use demo::Call as DemoCall;
 pub use runtime_primitives::{Permill, Perbill};
 pub use timestamp::BlockPeriod;
 pub use support::{StorageValue, construct_runtime};
